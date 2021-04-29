@@ -48,7 +48,7 @@ class XrayEmissivity():
     
     
     '''
-    def __init__(self, energy_range=[0.01,2.0], num_ebins=101, response=None, rmf=None, arf=None, use_physical_unit=True):
+    def __init__(self, energy_range=[0.01,2.0], num_ebins=101, rmf=None, arf=None, use_energy_unit=True):
         '''
         Initialize the object
         
@@ -59,14 +59,12 @@ class XrayEmissivity():
             sets the lower and upper bound of X-ray photon energy spectrum in keV (i.e. sets emin and emax)
         num_ebins : int
             sets the number of bins in X-ray photon energy spectrum
-        response : string, optional
-            whether to include instrumental response. Default is None
         rmf : string, optional if reponse is set to None
             Filename for the rmf reponse file, have to be set if response is set to True
         arf : string, optional
             Filename for the arf reponse file, optional
-        use_physical_unit : boolean, optional
-            True: use physical units for the emissivity: erg s^-1 cm^3
+        use_energy_unit : boolean, optional
+            True: use energy units for the emissivity: erg s^-1 cm^3
             False: use photon units for the emissivity: ph s^-1 cm^3
             Default is set to True
  
@@ -78,10 +76,13 @@ class XrayEmissivity():
         # create a set of energy bins (in keV) for the response. Note these are
         self.ebins = numpy.linspace(self.emin, self.emax, self.num_ebins)
 
-        self.response = response
+        self.response = False
         self.rmf = rmf
         self.arf = arf
 
+        if self.rmf != None :
+            self.response = True
+        
         self.etable = None
         self.tbins = None
         self.zbins = None
@@ -89,7 +90,9 @@ class XrayEmissivity():
         self.num_zbins = None
         self.temperature_range = None
         self.metallicity_range = None
-        self.use_physical_unit = use_physical_unit
+        self.use_energy_unit = use_energy_unit
+        
+        self.cie = None
 
     def set_tbins(self, temperature_range, num_tbins, use_log10=True) :
 
@@ -124,7 +127,7 @@ class XrayEmissivity():
         self.zbins = zbins
     
         
-    def compute_cie_xray_spectrum (self, temperature, metallicity):
+    def setup_cie_xray_spectrum (self):
 
         # declare the Collisional Ionization Equilibrium cieion
         cie = pyatomdb.spectrum.CIESession()
@@ -132,33 +135,41 @@ class XrayEmissivity():
         cie.set_broadening(True)
 
         # set the response (raw keyword tells pyatomdb it is not a real response file)
-        if self.response == None: 
+        if self.response == False: 
             cie.set_response(self.ebins, raw=True)
 
         else :
 
             try :
-                path.exists(rmf)
+                path.exists(self.rmf)
             except OSError as error:
-                logging.exception("RMF file "+str(rmf)+" not found!")
+                logging.exception("RMF file "+str(self.rmf)+" not found!")
                 raise error
             else :
                 cie.set_response(self.rmf, self.arf)
+                self.ebins = cie.ebins_out
+                self.num_ebins = len(cie.ebins_out)
+                self.emin = self.ebins[0]
+                self.emax = self.ebins[-1]
+                
+        self.cie = cie
+
+    def compute_cie_xray_spectrum (self, temperature, metallicity):
 
         kT = temperature # temperature in keV
 
         Zlist = numpy.arange(31) #<- all the elements
-        cie.set_abund(Zlist[1:], metallicity)
+        self.cie.set_abund(Zlist[1:], metallicity)
 
-        spectrum = cie.return_spectrum(kT)
+        spectrum = self.cie.return_spectrum(kT)
 
         return spectrum
 
-    def compute_specific_xray_emissivity (self, temperature, metallicity) :
+    def compute_xray_emissivity (self, temperature, metallicity) :
 
         spectrum = self.compute_cie_xray_spectrum (temperature, metallicity)
 
-        if self.use_physical_unit == True :
+        if self.use_energy_unit == True :
     
             #de = self.ebins[1:]-self.ebins[:-1]
             e =  0.5*(self.ebins[1:]+self.ebins[:-1])
@@ -170,7 +181,7 @@ class XrayEmissivity():
         return sum_spec
 
 
-    def tabulate_specific_xray_emissivity(self, temperature_range=[0.001, 20.0], metallicity_range=[0.02, 2.0], num_tbins=11, num_zbins=11) :
+    def tabulate_xray_emissivity(self, temperature_range=[0.001, 20.0], metallicity_range=[0.01, 10.0], num_tbins=51, num_zbins=11, use_log10=True) :
 
         '''
         Tabulate X-ray emissivity table
@@ -198,17 +209,19 @@ class XrayEmissivity():
         
         self.temperature_range = temperature_range
         self.metallicity_range = metallicity_range
-        self.set_tbins(temperature_range, num_tbins)
-        self.set_zbins(metallicity_range, num_zbins)
+        self.set_tbins(temperature_range, num_tbins, use_log10=use_log10)
+        self.set_zbins(metallicity_range, num_zbins, use_log10=use_log10)
         self.num_tbins = num_tbins
         self.num_zbins = num_zbins
 
         
         self.etable = numpy.zeros([self.num_tbins, self.num_zbins])
 
+        self.setup_cie_xray_spectrum()
+        
         for it, t in enumerate(self.tbins) :
             for iz, z in enumerate(self.zbins) :
-                self.etable[it, iz] = self.compute_specific_xray_emissivity (t, z)
+                self.etable[it, iz] = self.compute_xray_emissivity (t, z)
 
     def save_emissivity_table (self,filename) :
    
