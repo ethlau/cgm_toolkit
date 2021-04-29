@@ -131,8 +131,8 @@ class XrayEmissivity():
 
         # declare the Collisional Ionization Equilibrium cieion
         cie = pyatomdb.spectrum.CIESession()
-        cie.set_eebrems(True)
         cie.set_broadening(True)
+        cie.set_eebrems(True)
 
         # set the response (raw keyword tells pyatomdb it is not a real response file)
         if self.response == False: 
@@ -296,7 +296,7 @@ class XrayEmissivity():
 
             f.close()
 
-    def setup_interpolated_emissivity_table(self):
+    def setup_interpolated_emissivity_table(self, function='inverse'):
 
         '''
         Set up interpolated table from emissivity table
@@ -313,7 +313,7 @@ class XrayEmissivity():
         
             tbins2, zbins2 = numpy.meshgrid(numpy.log10(self.tbins), numpy.log10(self.zbins) , indexing='ij')
     
-            self.e_rbf = rbf.Rbf(tbins2, zbins2, self.etable)
+            self.e_rbf = rbf.Rbf(tbins2, zbins2, self.etable, function=function)
 
 
     def return_interpolated_emissivity (self, temperature, metallicity) :
