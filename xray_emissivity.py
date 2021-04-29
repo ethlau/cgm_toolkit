@@ -3,7 +3,7 @@ import numpy
 import h5py
 import logging
 from os import path
-from scipy.interpolate import rbf
+from scipy.interpolate import interpn
 
 class XrayEmissivity():
 
@@ -296,26 +296,6 @@ class XrayEmissivity():
 
             f.close()
 
-    def setup_interpolated_emissivity_table(self, function='inverse'):
-
-        '''
-        Set up interpolated table from emissivity table
-        '''
-        
-        try:
-            self.etable != None
-    
-        except Exception as exception:
-            logging.exception("Emissivity table not set up yet!")
-            raise exception
-
-        else :
-        
-            tbins2, zbins2 = numpy.meshgrid(numpy.log10(self.tbins), numpy.log10(self.zbins) , indexing='ij')
-    
-            self.e_rbf = rbf.Rbf(tbins2, zbins2, self.etable, function=function)
-
-
     def return_interpolated_emissivity (self, temperature, metallicity) :
 
         '''
@@ -337,15 +317,35 @@ class XrayEmissivity():
         
         '''
         
-        try:
-            self.e_rbf != None
-
-        except Exception as exception:
-            logging.exception("Interpolated emissivity table not set up yet! Run `setup_interpolated_emissivity_table()` first!")
-            raise exception
-
-        else :
+        points = (self.tbins, self.zbins)
+        values = self.etable
         
-            return self.e_rbf(numpy.log10(temperature), numpy.log10(metallicity))
-    
+        if numpy.isscalar(temperature) :   
+            if temperature < self.tbins[0]:
+                temperature = self.tbins[0]
+            elif temperature > self.tbins[-1]:
+                temperature = self.tbins[-1]  
+            if metallicity < self.zbins[0]:
+                metallicity = self.zbins[0]
+            elif metallicity > self.zbins[-1]:
+                metallicity = self.zbins[-1]
+            
+            xi = (temperature, metallicity)
+            result = interpn(points, values, xi, fill_value=0.0, method='splinef2d') 
+            
+        else :
+            for it, t in enumerate(temperature) :
+                if t < self.tbins[0]:
+                    temperature[it] = self.tbins[0]
+                if t > self.tbins[-1]:
+                    temperature[it] = self.tbins[-1]
+            for iz, z in enumerate(metallicity) :
+                if z < self.zbins[0]:
+                    metallicity[iz] = self.zbins[0]
+                if z > self.zbins[-1]:
+                    metallicity[iz] = self.zbins[-1]
 
+            xi = (temperature, metallicity)
+            result = interpn(points, values, xi, fill_value=0.0, method='splinef2d') 
+
+        return result
