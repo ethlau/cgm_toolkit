@@ -1,5 +1,6 @@
 # cgm_toolkit
 
-Takes output from [IllStack](https://github.com/emilymmoser/illstack_CAMELS) from CAMELS simulations and computes XSB and SZ profiles. 
+Simple code to compute X-ray emissivity for given temperautre and metallcity. 
+Uses [PyAtomDB](https://atomdb.readthedocs.io/en/master/) for X-ray calculations. 
+Usage example is provided in the ipython notebook `example.ipynb`. 
 
-Uses [PyAtomDB](https://atomdb.readthedocs.io/en/master/) for X-ray calculations
