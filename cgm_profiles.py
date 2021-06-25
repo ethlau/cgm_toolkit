@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 import xray_emissivity
 
@@ -34,7 +35,7 @@ class HaloProfile():
     def spherical_y_profile (self, radius) :
 
         '''
-        return: spherical compton-y profile
+        return: spherical compton-y profile in Mpc^-1
 
         '''
         profile = np.interp(radius, self.radial_bin, self.pressure)
@@ -47,7 +48,7 @@ class HaloProfile():
     def spherical_xray_emissivity_profile (self, radius, etable='etable_erosita.hdf5') :
 
         '''
-        return: spherical xray emissivity profile
+        return: spherical xray emissivity profile in erg/cm^3/s/sr
 
         '''
         xray = xray_emissivity.XrayEmissivity()
@@ -56,7 +57,7 @@ class HaloProfile():
 
         ne = self.density * mu / mu_e
         nH = ne / 1.2
-        em = xcool  * ne * nH
+        em = xcool  * ne * nH / (1.+self.redshift)**4 / (4.0 * math.pi)
 
         profile = np.interp(radius, self.radial_bin, em)
 
