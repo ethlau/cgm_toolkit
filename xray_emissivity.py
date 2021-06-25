@@ -1,5 +1,5 @@
 import pyatomdb
-import numpy
+import numpy as np
 import h5py
 import logging
 from os import path
@@ -74,7 +74,7 @@ class XrayEmissivity():
         self.num_ebins = num_ebins
 
         # create a set of energy bins (in keV) for the response. Note these are
-        self.ebins = numpy.linspace(self.emin, self.emax, self.num_ebins)
+        self.ebins = np.linspace(self.emin, self.emax, self.num_ebins)
 
         self.response = False
         self.rmf = rmf
@@ -98,14 +98,14 @@ class XrayEmissivity():
 
         if use_log10 :
 
-            temperature_min = numpy.log10(temperature_range[0])
-            temperature_max = numpy.log10(temperature_range[1])
-            tbins = numpy.logspace(temperature_min,temperature_max,num_tbins)
+            temperature_min = np.log10(temperature_range[0])
+            temperature_max = np.log10(temperature_range[1])
+            tbins = np.logspace(temperature_min,temperature_max,num_tbins)
         else :
 
             temperature_min = (temperature_range[0])
             temperature_max = (temperature_range[1])
-            tbins = numpy.linspace(temperature_min,temperature_max,num_tbins)
+            tbins = np.linspace(temperature_min,temperature_max,num_tbins)
 
         self.num_tbins = num_tbins
         self.tbins = tbins
@@ -114,14 +114,14 @@ class XrayEmissivity():
 
         if use_log10 :
 
-            metallicity_min = numpy.log10(metallicity_range[0])
-            metallicity_max = numpy.log10(metallicity_range[1])
-            zbins = numpy.logspace(metallicity_min,metallicity_max,num_zbins)
+            metallicity_min = np.log10(metallicity_range[0])
+            metallicity_max = np.log10(metallicity_range[1])
+            zbins = np.logspace(metallicity_min,metallicity_max,num_zbins)
         else :
 
             metallicity_min = (metallicity_range[0])
             metallicity_max = (metallicity_range[1])
-            zbins = numpy.linspace(metallicity_min,metallicity_max,num_zbins)
+            zbins = np.linspace(metallicity_min,metallicity_max,num_zbins)
 
         self.num_zbins = num_zbins
         self.zbins = zbins
@@ -158,7 +158,7 @@ class XrayEmissivity():
 
         kT = temperature # temperature in keV
 
-        Zlist = numpy.arange(31) #<- all the elements
+        Zlist = np.arange(31) #<- all the elements
         self.cie.set_abund(Zlist[1:], metallicity)
 
         spectrum = self.cie.return_spectrum(kT)
@@ -173,10 +173,10 @@ class XrayEmissivity():
     
             #de = self.ebins[1:]-self.ebins[:-1]
             e =  0.5*(self.ebins[1:]+self.ebins[:-1])
-            sum_spec = numpy.sum(e*spectrum)
+            sum_spec = np.sum(e*spectrum)
 
         else :
-            sum_spec = numpy.sum(spectrum)
+            sum_spec = np.sum(spectrum)
 
         return sum_spec
 
@@ -215,7 +215,7 @@ class XrayEmissivity():
         self.num_zbins = num_zbins
 
         
-        self.etable = numpy.zeros([self.num_tbins, self.num_zbins])
+        self.etable = np.zeros([self.num_tbins, self.num_zbins])
 
         self.setup_cie_xray_spectrum()
         
@@ -296,7 +296,7 @@ class XrayEmissivity():
 
             f.close()
 
-    def return_interpolated_emissivity (self, temperature, metallicity) :
+    def return_interpolated_emissivity (self, temperature, metallicity, method='splinef2d', use_log10=True) :
 
         '''
         Returns emissivity value from interpolated emissivity table
@@ -317,35 +317,53 @@ class XrayEmissivity():
         
         '''
         
-        points = (self.tbins, self.zbins)
+        if use_log10 :
+            ltbins = np.log10(self.tbins)
+            lzbins = np.log10(self.zbins)
+        else :
+            ltbins = (self.tbins)
+            lzbins = (self.zbins)    
+        points = (ltbins, lzbins)
         values = self.etable
         
-        if numpy.isscalar(temperature) :   
-            if temperature < self.tbins[0]:
-                temperature = self.tbins[0]
-            elif temperature > self.tbins[-1]:
-                temperature = self.tbins[-1]  
-            if metallicity < self.zbins[0]:
-                metallicity = self.zbins[0]
-            elif metallicity > self.zbins[-1]:
-                metallicity = self.zbins[-1]
-            
-            xi = (temperature, metallicity)
-            result = interpn(points, values, xi, fill_value=0.0, method='splinef2d') 
-            
+        if use_log10 :
+            lt = np.log10(temperature)
+            lz = np.log10(metallicity)
         else :
-            for it, t in enumerate(temperature) :
-                if t < self.tbins[0]:
-                    temperature[it] = self.tbins[0]
-                if t > self.tbins[-1]:
-                    temperature[it] = self.tbins[-1]
-            for iz, z in enumerate(metallicity) :
-                if z < self.zbins[0]:
-                    metallicity[iz] = self.zbins[0]
-                if z > self.zbins[-1]:
-                    metallicity[iz] = self.zbins[-1]
+            lt = (temperature)
+            lz = (metallicity)
+        
+        if np.isscalar(lt) :   
+            if lt < ltbins[0]:
+                lt = ltbins[0]
+            elif lt > ltbins[-1]:
+                lt = ltbins[-1] 
+            if lz < lzbins[0]:
+                lz = lzbins[0]
+            elif lz > lzbins[-1]:
+                lz = lzbins[-1]
+                
+        else :
+            for i, val in enumerate(lt) :
+                if val < ltbins[0]:
+                    lt[i] = ltbins[0]
+                if val > ltbins[-1]:
+                    lt[i] = ltbins[-1]
+            for i, val in enumerate(lz) :
+                if val < lzbins[0]:
+                    lz[i] = lzbins[0]
+                if val > lzbins[-1]:
+                    lz[i] = lzbins[-1]
 
-            xi = (temperature, metallicity)
-            result = interpn(points, values, xi, fill_value=0.0, method='splinef2d') 
+        xi = (lt, lz)
+        result = interpn(points, values, xi, fill_value=0.0, method=method) 
+
+        if np.isscalar(lt) :
+            if result < 0:
+                result = 0
+        else: 
+            for i, val in enumerate(result) :
+                if val < 0 :
+                    result[i] = 0.0
 
         return result
