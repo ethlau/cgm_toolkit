@@ -132,10 +132,10 @@ class XrayEmissivity():
         # declare the Collisional Ionization Equilibrium cieion
         cie = pyatomdb.spectrum.CIESession()
         cie.set_broadening(True)
-        cie.set_eebrems(True)
 
         # set the response (raw keyword tells pyatomdb it is not a real response file)
         if self.response == False: 
+            print("Computing X-ray spectrum without instrumental response")
             cie.set_response(self.ebins, raw=True)
 
         else :
@@ -151,18 +151,31 @@ class XrayEmissivity():
                 self.num_ebins = len(cie.ebins_out)
                 self.emin = self.ebins[0]
                 self.emax = self.ebins[-1]
-                
+        
         self.cie = cie
 
     def compute_cie_xray_spectrum (self, temperature, metallicity):
 
-        kT = temperature # temperature in keV
-
         Zlist = np.arange(31) #<- all the elements
+        
+        # This is the electron-electron bremstrahlung component alone
+        #set all abundances to 1 (I need a full census of electrons in the plasma for e-e brems)
         self.cie.set_abund(Zlist[1:], metallicity)
+        self.cie.set_eebrems(True)
+        spec = self.cie.return_spectrum(temperature, dolines=False, docont=False, dopseudo=False)
 
-        spectrum = self.cie.return_spectrum(kT)
+        # turn off all the elements
+        self.cie.set_abund(Zlist[1:], 0.0)
+        self.cie.set_eebrems(False)
 
+        for Z in Zlist[1:] :
+            # turn back on this element
+            self.cie.set_abund(Z, metallicity)
+            # turn off e-e bremsstrahlung (avoid double counting)
+            spec += self.cie.return_spectrum(temperature)
+
+        spectrum = spec
+    
         return spectrum
 
     def compute_xray_emissivity (self, temperature, metallicity) :
@@ -181,7 +194,7 @@ class XrayEmissivity():
         return sum_spec
 
 
-    def tabulate_xray_emissivity(self, temperature_range=[0.001, 20.0], metallicity_range=[0.01, 10.0], num_tbins=51, num_zbins=11, use_log10=True) :
+    def tabulate_xray_emissivity(self, temperature_range=[0.001, 30.0], metallicity_range=[0.01, 10.0], num_tbins=51, num_zbins=11, use_log10=True) :
 
         '''
         Tabulate X-ray emissivity table
@@ -191,12 +204,12 @@ class XrayEmissivity():
         
         temperature_range : list, optional
             input temperature range in keV, list of two numbers: first marks the lower bound, last marks the upper bound. 
-            Default is [0,001, 20.0]
+            Default is [0.001, 30.0]
         metallicity_range : list, optional
             input metalicity range in solar unit, list of two numbers: first marks the lower bound, last marks the upper bound.
-            Default is [0.02, 2.0]
+            Default is [0.01, 10.0]
         num_tbins: int, optional
-            number of bins temperature array, default is 11
+            number of bins temperature array, default is 51
         num_zbins: int, optional
             number of bins metallicity array, default is 11   
             
@@ -214,7 +227,6 @@ class XrayEmissivity():
         self.num_tbins = num_tbins
         self.num_zbins = num_zbins
 
-        
         self.etable = np.zeros([self.num_tbins, self.num_zbins])
 
         self.setup_cie_xray_spectrum()
@@ -223,7 +235,7 @@ class XrayEmissivity():
             for iz, z in enumerate(self.zbins) :
                 self.etable[it, iz] = self.compute_xray_emissivity (t, z)
 
-    def save_emissivity_table (self,filename) :
+    def save_emissivity_table (self,filename, overwrite=True) :
    
         '''
         Save X-ray emissivity table to file in hdf5 format
@@ -248,7 +260,7 @@ class XrayEmissivity():
             raise exception
 
         else :
-            if path.exists(filename+".hdf5") :
+            if path.exists(filename+".hdf5") and overwrite == False:
                 print("File already exists! Not saving file.")
             else :
                 print("Saving emissivity table as "+filename+".hdf5")
@@ -332,7 +344,7 @@ class XrayEmissivity():
         else :
             lt = (temperature)
             lz = (metallicity)
-        
+
         if np.isscalar(lt) :   
             if lt < ltbins[0]:
                 lt = ltbins[0]
@@ -344,6 +356,10 @@ class XrayEmissivity():
                 lz = lzbins[-1]
                 
         else :
+            
+            shape = temperature.shape
+            lt = lt.flatten()
+            lz = lz.flatten()
             for i, val in enumerate(lt) :
                 if val < ltbins[0]:
                     lt[i] = ltbins[0]
@@ -355,6 +371,7 @@ class XrayEmissivity():
                 if val > lzbins[-1]:
                     lz[i] = lzbins[-1]
 
+                    
         xi = (lt, lz)
         result = interpn(points, values, xi, fill_value=0.0, method=method) 
 
@@ -365,5 +382,7 @@ class XrayEmissivity():
             for i, val in enumerate(result) :
                 if val < 0 :
                     result[i] = 0.0
-
+        
+            result = np.reshape(result, shape)
+                    
         return result
