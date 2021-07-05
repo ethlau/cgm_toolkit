@@ -5,6 +5,8 @@ import logging
 from os import path
 from scipy.interpolate import interpn
 
+from tqdm import tqdm
+
 class XrayEmissivity():
 
     '''
@@ -166,35 +168,43 @@ class XrayEmissivity():
 
         # turn off all the elements
         self.cie.set_abund(Zlist[1:], 0.0)
+        # turn back on this element
+        self.cie.set_abund(Zlist[1:], metallicity)
+        # turn off e-e bremsstrahlung (avoid double counting)
         self.cie.set_eebrems(False)
 
-        for Z in Zlist[1:] :
-            # turn back on this element
-            self.cie.set_abund(Z, metallicity)
-            # turn off e-e bremsstrahlung (avoid double counting)
-            spec += self.cie.return_spectrum(temperature)
+        spec += self.cie.return_spectrum(temperature)
+        
+        #for Z in Zlist[1:]:
+        #    self.cie.set_abund(Z, metallicity)
+        #    spec += self.cie.return_spectrum(temperature)
 
+        #print(spec)
+        #print(spec)
+        
         spectrum = spec
     
         return spectrum
 
-    def compute_xray_emissivity (self, temperature, metallicity) :
+    def compute_xray_emissivity (self, temperature, metallicity, nH) :
 
         spectrum = self.compute_cie_xray_spectrum (temperature, metallicity)
 
-        if self.use_energy_unit == True :
-    
-            #de = self.ebins[1:]-self.ebins[:-1]
+        if nH > 0:
             e =  0.5*(self.ebins[1:]+self.ebins[:-1])
-            sum_spec = np.sum(e*spectrum)
-
+            absorption = exp( - wabs(e) * nH*1e20 );
+            spectrum *= absorption
+        
+        if self.use_energy_unit == True :
+            e =  0.5*(self.ebins[1:]+self.ebins[:-1])
+            sum_spec = np.sum(e*spectrum*pyatomdb.const.ERG_KEV)
         else :
             sum_spec = np.sum(spectrum)
 
         return sum_spec
 
 
-    def tabulate_xray_emissivity(self, temperature_range=[0.001, 30.0], metallicity_range=[0.01, 10.0], num_tbins=51, num_zbins=11, use_log10=True) :
+    def tabulate_xray_emissivity(self, temperature_range=[0.001, 100.0], metallicity_range=[0.01, 10.0], nH = 0.0, num_tbins=51, num_zbins=11, use_log10=True) :
 
         '''
         Tabulate X-ray emissivity table
@@ -212,7 +222,8 @@ class XrayEmissivity():
             number of bins temperature array, default is 51
         num_zbins: int, optional
             number of bins metallicity array, default is 11   
-            
+        nH : double, optional
+            Hydrogen column density in 1e20 cm^-2 for Galactic absorption 
         Returns
         -------
         
@@ -231,9 +242,9 @@ class XrayEmissivity():
 
         self.setup_cie_xray_spectrum()
         
-        for it, t in enumerate(self.tbins) :
-            for iz, z in enumerate(self.zbins) :
-                self.etable[it, iz] = self.compute_xray_emissivity (t, z)
+        for it, t in enumerate(tqdm(self.tbins)) :
+            for iz, z in enumerate(self.zbins):
+                self.etable[it, iz] = self.compute_xray_emissivity (t, z, nH)
 
     def save_emissivity_table (self,filename, overwrite=True) :
    
@@ -386,3 +397,28 @@ class XrayEmissivity():
             result = np.reshape(result, shape)
                     
         return result
+    
+    def wabs (energy) :
+        #wabs galactic absorption model */
+        # E in keV
+
+        emarray = np.array([0.1, 0.284, 0.4, 0.532, 0.707, 0.867, 1.303, 1.840,
+                          2.471, 3.210, 4.038, 7.111, 8.331, 10.0])
+
+        c0 = np.array([17.3, 34.6, 78.1, 71.4, 95.5, 308.9, 120.6, 141.3,
+                         202.7, 342.7, 352.2, 433.9, 629.0, 701.2])
+
+        c1 = np.array([608.1, 267.9, 18.8, 66.8, 145.8, -380.6, 169.3,
+                        146.8, 104.7, 18.7, 18.7, -2.4, 30.9, 25.2])
+
+        c2 = np.array([-2150., -476.1 ,4.3, -51.4, -61.1, 294.0, -47.7,
+                        -31.5, -17.0, 0.0, 0.0, 0.75, 0.0, 0.0])
+
+        for ie, e in enumerate(emarray):
+            if (energy < e) :
+                sigma=(c0[ie]+c1[ie]*energy+c2[ie]*energy*energy)/energy**3.0 * 1.e-24;
+            else :
+                continue
+        ie=13;
+        sigma=(c0[ie]+c1[ie]*energy+c2[ie]*energy*energy)/energy**3.0 * 1.e-24;
+        return sigma
