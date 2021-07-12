@@ -356,7 +356,7 @@ class XrayEmissivity():
         
         emissivity : double
             emissivity in either erg s^-1 cm^3 if use_physical_unit has been set to True (default), or ph s^-1 cm^3 otherwise.
-            If response files are used, the unit is erg s^-1 cm^5 or ph s^-1 cm^5. 
+            If response files are used, the unit is erg s^-1 cm^5 in physical unit or ph s^-1 cm^5 otherwise. 
         
         '''
         
@@ -369,7 +369,7 @@ class XrayEmissivity():
         points = (ltbins, lzbins)
         values = self.etable
         
-        if use_log10 :
+        if use_log10 :            
             lt = np.log10(temperature)
             lz = np.log10(metallicity)
         else :
@@ -410,9 +410,11 @@ class XrayEmissivity():
             if result < 0:
                 result = 0
         else: 
-            for i, val in enumerate(result) :
-                if val < 0 :
-                    result[i] = 0.0
+            #for i, val in enumerate(result) :
+            #    if val < 0 :
+            #        result[i] = 0.0
+            
+            result[result < 0] = 0.0
         
             result = np.reshape(result, shape)
                     
