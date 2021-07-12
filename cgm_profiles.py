@@ -16,6 +16,7 @@ mu = 0.58824; # X=0.76 assumed
 mu_e = 1.136; # X=0.76 assumed
 XH = 0.76 #primordial hydrogen fraction
 pe_factor = (2.0*XH+2.0)/(5.0*XH+3.0) #/conversion factor from gas pressure to electron pressure
+K_to_keV = 8.61733e-08 
 
 class HaloProfile():
 
@@ -158,10 +159,19 @@ class HaloProfile():
         return profile
 
     def return_ion_frac (self, temperature, ion):
+
+        '''
+        Input:
+            temperature: temperture in keV
+            ion: string name of ion, e.g., 'FeXXV'
+
+        '''
         
         ion_frac = ion_frac.IonFrac()
         
-        frac = ion_frac.return_ion_fraction (temperature, ion)
+        temperature_in_K = temperature / K_to_keV
+
+        frac = ion_frac.return_ion_fraction (temperature_in_K, ion)
         
         return frac
         
