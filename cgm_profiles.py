@@ -158,6 +158,23 @@ class HaloProfile():
  
         return profile
 
+    def projected_density_profile (self, radius) :
+
+        '''
+        Input: 
+            radius: numpy array of radius in kpc. Can be different from the one that initialize the class.
+        
+        return: numpy array of project number density profile (in cm^-2)
+
+        '''
+        
+        sph_prof = self.density
+
+        profile = self.abel_projection(radius, sph_prof) * kpc_to_cm
+ 
+        return profile
+
+
     def return_ion_frac (self, temperature, ion):
 
         '''
