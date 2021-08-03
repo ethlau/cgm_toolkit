@@ -1,8 +1,10 @@
 import numpy as np
 import math
 
-import xray_emissivity
-import ion_frac
+from astropy import units as un, constants
+
+from . import xray_emissivity
+from . import ion_frac
 
 Mpc_to_cm = 3.0857e24
 kpc_to_cm = Mpc_to_cm/1.e3
@@ -25,14 +27,14 @@ class HaloProfile():
         self.mass = mass
         self.redshift = redshift
         self.radial_bin = radial_bin # radius in kpc
-        self.pressure = pressure # pressure in keV cm^-3
-        self.density = density # density in cm^-3
+        self.pressure = pressure # electron pressure in keV cm^-3
+        self.density = density # number density in cm^-3
         self.metallicity = metallicity # metallicty in Zsolar
         
-        if temperature:
-            self.temperature = temperature # temperature in keV
-        else :
+        if temperature == None:
             self.temperature = pressure / density # pressure in keV cm^-3, density in cm^-3
+        else:
+            self.temperature = temperature # temperature in keV
 
 
     def differential_volume (self, radius):
@@ -43,7 +45,7 @@ class HaloProfile():
         return volume of shell in kpc^3
         '''
         
-        volume = np.zeros(radius)
+        volume = np.zeros(radius.shape)
         
         volume[0] = (4.*math.pi/3.) * radius[0]**3
 
@@ -54,54 +56,76 @@ class HaloProfile():
         return volume
 
     
-    def abel_projection(self, rad, prof3D) :
+    def abel_projection(r2D, prof) :
     
         '''
         return: np array with projected profile
         '''
+        from scipy.interpolate import interp1d
+        from scipy import integrate
     
-        prof2D = np.zeros(len(rad))
-        proj_rad = rad
-        dr = np.zeros(len(rad))
-        for ir, r in enumerate(proj_rad) :
-            if ir > 0:
-                dr[ir] = rad[ir] - rad[ir-1]
+        prof2D = np.zeros(len(r2D))
+        prof3D = interp1d(r2D, prof, kind='cubic',fill_value='extrapolate')
 
-        for irp, rp in enumerate(proj_rad) :
-            integ = 0.0
-            for ir, r in enumerate(rad) :
-                if r > rp :
-                    integ += prof3D[ir]*2*r*dr[ir]/np.sqrt(r**2-rp**2)
+        for irp, rp in enumerate(r2D) :
+            zmax = np.sqrt(max(r2D)**2 + rp**2)
+            zbin_edge = np.linspace(0.0, zmax, 10000)
+            zbin = 0.5*(zbin_edge[1:] + zbin_edge[:-1])
+            dz = zbin_edge[1:]-zbin_edge[:-1]
+            rprime = np.sqrt(rp**2+zbin**2)
 
+            fz = 2*prof3D(rprime)
+            integ = integrate.trapezoid(fz,zbin)
             prof2D[irp] = integ
 
-        return prof2D
- 
+        return prof2D 
+    
     def spherical_dy_profile (self, radius) :
 
         '''
+        Input: 
+            radius: numpy array of radius in kpc. 
+        
         return: spherical *differetial* compton-y profile in Mpc^-2
 
         '''
         profile = np.interp(radius, self.radial_bin, self.pressure)
 
-        profile *= pe_factor * sigma_T / m_e_keV * (Mpc_to_cm)  #unit = Mpc^-1
+        profile *= sigma_T / m_e_keV * Mpc_to_cm #unit = Mpc^-1
         
         return profile
 
     def spherical_integrated_y_profile (self, radius) :
 
         '''
+        Input: 
+            radius: numpy array of radius in kpc. 
+        
         return: spherical *integrated* compton-y profile in Mpc^2
 
         '''
         
-        dvol = self.differential_volume(radius)* (1.0e-3)**3 # convert from kpc^3 to Mpc^3
+        dvol = self.differential_volume(radius)*1e-9 # convert from kpc^3 to Mpc^3
         
-        profile = spherical_dy_profile(radius) * dvol # Mpc^-1 * Mpc^3 -> Mpc^2
+        profile = self.spherical_dy_profile(radius) * dvol # Mpc^-1 * Mpc^3 -> Mpc^2
 
         return profile
 
+    def projected_y_profile (self, radius) :
+
+        '''
+        Input: 
+            radius: numpy array of radius in kpc. Can be different from the one that initialize the class.
+        
+        return: numpy array of y profile (dimensionless)
+
+        '''
+        
+        sph_prof = self.spherical_dy_profile(radius) # Mpc^-1
+
+        profile = self.abel_projection(radius, sph_prof) / 1000.0 # Mpc^-1 kpc -> Mpc^-1 * Mpc 
+ 
+        return profile
         
     def spherical_xray_emissivity_profile (self, radius, etable='etable.hdf5') :
 
@@ -141,22 +165,6 @@ class HaloProfile():
         profile = self.abel_projection(radius, sph_prof) * kpc_to_cm #erg/cm^2/s/sr
 
         return profile
-    
-    def projected_y_profile (self, radius) :
-
-        '''
-        Input: 
-            radius: numpy array of radius in kpc. Can be different from the one that initialize the class.
-        
-        return: numpy array of y profile (dimensionless)
-
-        '''
-        
-        sph_prof = self.spherical_dy_profile(radius) # Mpc^-1
-
-        profile = self.abel_projection(radius, sph_prof) * 1.0e-3 # Mpc^-1 kpc -> Mpc^-1 * Mpc 
- 
-        return profile
 
     def projected_density_profile (self, radius) :
 
@@ -170,7 +178,7 @@ class HaloProfile():
         
         sph_prof = self.density
 
-        profile = self.abel_projection(radius, sph_prof) * kpc_to_cm
+        profile = self.abel_projection(radius.to('Mpc'), sph_prof) * Mpc_to_cm
  
         return profile
 
