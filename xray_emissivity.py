@@ -55,8 +55,7 @@ class XrayEmissivity():
         Initialize the object
         
         Parameters
-        ----------
-        
+        ---------- 
         energy_range : list of two values
             sets the lower and upper bound of X-ray photon energy spectrum in keV (i.e. sets emin and emax)
         num_ebins : int
@@ -231,10 +230,9 @@ class XrayEmissivity():
         
         Parameters
         ----------
-        
         temperature_range : list, optional
             input temperature range in keV, list of two numbers: first marks the lower bound, last marks the upper bound. 
-            Default is [0.001, 30.0]
+            Default is [0.001, 100.0]
         metallicity_range : list, optional
             input metalicity range in solar unit, list of two numbers: first marks the lower bound, last marks the upper bound.
             Default is [0.01, 10.0]
@@ -244,9 +242,9 @@ class XrayEmissivity():
             number of bins metallicity array, default is 11   
         nH : double, optional
             Hydrogen column density in 1e20 cm^-2 for Galactic absorption 
+
         Returns
-        -------
-        
+        ------- 
         None
         
         '''
@@ -273,13 +271,11 @@ class XrayEmissivity():
         
         Parameters
         ----------
-        
-        filename : str
+        filename : string
             filename of the file. The saved file will be named "filename.hdf5"
             
         Returns
-        -------
-        
+        -------        
         None
         
         '''
@@ -353,7 +349,6 @@ class XrayEmissivity():
         
         Returns
         -------
-        
         emissivity : double
             emissivity in either erg s^-1 cm^3 if use_physical_unit has been set to True (default), or ph s^-1 cm^3 otherwise.
             If response files are used, the unit is erg s^-1 cm^5 in physical unit or ph s^-1 cm^5 otherwise. 
