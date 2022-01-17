@@ -56,7 +56,7 @@ class HaloProfile():
         return volume
 
     
-    def abel_projection(r2D, prof) :
+    def abel_projection(self,r2D, prof) :
     
         '''
         return: np array with projected profile
