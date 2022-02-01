@@ -68,7 +68,7 @@ class HaloProfile():
         prof3D = interp1d(r2D, prof, kind='cubic',fill_value='extrapolate')
 
         for irp, rp in enumerate(r2D) :
-            zmax = np.sqrt(max(r2D)**2 + rp**2)
+            zmax = np.sqrt(max(r2D)**2 - rp**2)
             zbin_edge = np.linspace(0.0, zmax, 10000)
             zbin = 0.5*(zbin_edge[1:] + zbin_edge[:-1])
             dz = zbin_edge[1:]-zbin_edge[:-1]
