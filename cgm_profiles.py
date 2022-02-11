@@ -2,6 +2,7 @@ import numpy as np
 import math
 
 from astropy import units as un, constants
+from astropy.cosmology import Planck13 as cosmo
 
 from . import xray_emissivity
 from . import ion_frac
@@ -30,11 +31,12 @@ class HaloProfile():
         self.pressure = pressure # electron pressure in keV cm^-3
         self.density = density # number density in cm^-3
         self.metallicity = metallicity # metallicty in Zsolar
-        
-        if temperature == None:
-            self.temperature = pressure / density # pressure in keV cm^-3, density in cm^-3
-        else:
+        #self.temperature = temperature # temperature in keV
+
+        if np.all(temperature) == True:
             self.temperature = temperature # temperature in keV
+        else:
+            self.temperature = pressure / density # pressure in keV cm^-3, density in cm^-3
 
 
     def differential_volume (self, radius):
@@ -149,7 +151,31 @@ class HaloProfile():
 
         return profile
 
-   
+     def projected_xray_flux_profile (self, radius, etable='etable.hdf5') :
+
+        '''
+        Input: 
+            radius: numpy array of radius in kpc. Can be different from the one that initialize the class.
+        
+        return: numpy array with xray surface brightness profile in erg/cm^2/s/sr
+
+        '''
+        
+        emissivity_prof = self.spherical_xray_emissivity_profile(radius, etable=etable) * (1.+self.redshift)**4 *  / (4.0 * math.pi) #erg/cm^3/s
+
+        dvol = self.differential_volume(radius) * kpc_to_cm * kpc_to_cm * kpc_to_cm # convert from kpc^3 to cm^3
+
+        luminosity_prof = emissivity_prof * dvol
+
+        d_l = cosmo.luminosity_distance(self.redshift) * Mpc_to_cm  
+
+        flux_prof = luminosity / (4.0 * math.pi) /d_l**2
+
+        profile = self.abel_projection(radius, sph_prof) * kpc_to_cm #erg/s/cm^2
+
+        return profile
+
+  
     def projected_xray_surface_brightness_profile (self, radius, etable='etable.hdf5') :
 
         '''
