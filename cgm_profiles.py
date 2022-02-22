@@ -28,7 +28,7 @@ class HaloProfile():
         self.mass = mass
         self.redshift = redshift
         self.radial_bin = radial_bin # radius in kpc
-        self.pressure = pressure # electron pressure in keV cm^-3
+        self.pressure = pressure # pressure in keV cm^-3
         self.density = density # number density in cm^-3
         self.metallicity = metallicity # metallicty in Zsolar
         #self.temperature = temperature # temperature in keV
@@ -67,7 +67,7 @@ class HaloProfile():
         from scipy import integrate
     
         prof2D = np.zeros(len(r2D))
-        prof3D = interp1d(r2D, prof, kind='cubic',fill_value='extrapolate')
+        prof3D = interp1d(r2D, prof, kind='linear', fill_value=None, bounds_error=False)
 
         for irp, rp in enumerate(r2D) :
             zmax = np.sqrt(max(r2D)**2 - rp**2)
@@ -91,7 +91,7 @@ class HaloProfile():
         return: spherical *differetial* compton-y profile in Mpc^-2
 
         '''
-        profile = np.interp(radius, self.radial_bin, self.pressure)
+        profile = np.interp(radius, self.radial_bin, self.pressure) * pe_factor
 
         profile *= sigma_T / m_e_keV * Mpc_to_cm #unit = Mpc^-1
         
@@ -150,14 +150,14 @@ class HaloProfile():
         profile = np.interp(radius, self.radial_bin, em)
 
         return profile
-    
-    def projected_xray_flux_profile (self, radius, etable='etable.hdf5') :
+ 
+    def spherical_xray_luminosity_profile (self, radius, etable='etable.hdf5') :
 
         '''
         Input: 
         radius: numpy array of radius in kpc. Can be different from the one that initialize the class.
 
-        return: numpy array with xray surface brightness profile in erg/cm^2/s/sr
+        return: numpy array with xray luminosity profile in erg/s
 
         '''
 
@@ -167,12 +167,9 @@ class HaloProfile():
 
         luminosity_prof = emissivity_prof * dvol
 
-        d_l = cosmo.luminosity_distance(self.redshift) * Mpc_to_cm
-
-        profile = luminosity_prof / (4.0 * math.pi) /d_l**2
+        profile = luminosity_prof
 
         return profile
-
   
     def projected_xray_surface_brightness_profile (self, radius, etable='etable.hdf5') :
 

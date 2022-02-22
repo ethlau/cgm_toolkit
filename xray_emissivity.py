@@ -399,7 +399,7 @@ class XrayEmissivity():
 
                     
         xi = (lt, lz)
-        result = interpn(points, values, xi, fill_value=0.0, method=method) 
+        result = interpn(points, values, xi, fill_value=0.0, method=method, bounds_error=False) 
 
         if np.isscalar(lt) :
             if result < 0:
