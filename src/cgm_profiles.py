@@ -2,7 +2,7 @@ import numpy as np
 import math
 
 from astropy import units as un, constants
-from astropy.cosmology import Planck13 as cosmo
+from astropy.cosmology import Planck18 as cosmo
 
 from . import xray_emissivity
 from . import ion_frac
@@ -77,7 +77,7 @@ class HaloProfile():
         from scipy import integrate
     
         prof2D = np.zeros(len(r2D))
-        prof3D = interp1d(r2D, prof, kind='cubic',fill_value='extrapolate')
+        prof3D = interp1d(r2D, prof, kind='linear', fill_value=None, bounds_error=False)
 
         for irp, rp in enumerate(r2D) :
             zmax = np.sqrt(max(r2D)**2 - rp**2)
@@ -101,7 +101,7 @@ class HaloProfile():
         return: spherical *differetial* compton-y profile in kpc^-2
 
         '''
-        profile = np.interp(radius, self.radial_bin, self.pressure)
+        profile = np.interp(radius, self.radial_bin, self.pressure) * pe_factor
 
         profile *= sigma_T / m_e_keV * kpc_to_cm #unit = kpc^-1
         
@@ -183,8 +183,7 @@ class HaloProfile():
         profile = np.interp(radius, self.radial_bin, em)
 
         return profile
-
-  
+ 
     def projected_xray_surface_brightness_profile (self, radius, etable='etable.hdf5') :
 
         '''
