@@ -2,9 +2,9 @@ import numpy as np
 
 class IonFrac() :
 
-    def __init__(self, file='ion_frac.txt'):
+    def __init__(self, ion_table='ion_frac_CIE.txt'):
 
-        self.ion_frac_table = np.genfromtxt('ion_frac_CIE.txt',delimiter=',', names=True)
+        self.ion_frac_table = np.genfromtxt(ion_table,delimiter=',', names=True)
 
     def return_ion_fraction (self, temperature, ion) :
 
