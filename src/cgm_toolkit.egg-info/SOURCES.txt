@@ -1,9 +1,0 @@
-LICENSE
-README.md
-pyproject.toml
-setup.py
-src/cgm_toolkit.egg-info/PKG-INFO
-src/cgm_toolkit.egg-info/SOURCES.txt
-src/cgm_toolkit.egg-info/dependency_links.txt
-src/cgm_toolkit.egg-info/requires.txt
-src/cgm_toolkit.egg-info/top_level.txt
