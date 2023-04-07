@@ -1,9 +1,12 @@
 [build-system]
 requires = [
-    "setuptools>=42",
-    "astropy>=4.0",
-    "pyatomdb>=0.10",
-    "h5py>=3.0",
+    "setuptools",
+    "numpy",
+    "scipy",
+    "astropy",
+    "pyatomdb",
+    "h5py",
+    "tqdm",
     "wheel"
 ]
 build-backend = "setuptools.build_meta"
