@@ -35,6 +35,6 @@ setup(
         'numpy',
         'scipy',
         'pyatomdb'],
-    python_requires=">=3.9"
+    python_requires=">=3.9",
     package_data={"cgm_toolkit": ("data/*.hdf5",)}
 )
