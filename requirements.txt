@@ -1,0 +1,6 @@
+astropy
+numpy
+scipy
+h5py
+pyatomdb
+tqdm

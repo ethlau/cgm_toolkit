@@ -1,5 +1,8 @@
 from setuptools import setup, find_packages
 
+setup()
+
+'''
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
@@ -38,3 +41,4 @@ setup(
     python_requires=">=3.9",
     package_data={"cgm_toolkit": ("data/*.hdf5",)}
 )
+'''

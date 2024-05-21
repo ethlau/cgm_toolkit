@@ -191,8 +191,6 @@ class HaloProfile():
         nH = ne / 1.2
         em = xcool  * ne * nH / (1.+self.redshift)**4 / (4.0 * math.pi)
 
-        print(ne, nH)
-
         profile = np.interp(radius, self.radial_bin, em)
 
         return profile

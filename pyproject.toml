@@ -1,6 +1,7 @@
 [build-system]
 requires = [
-    "setuptools",
+    "setuptools>=45",
+    "setuptools_scm>=7",     
     "numpy",
     "scipy",
     "astropy",
@@ -8,5 +9,51 @@ requires = [
     "h5py",
     "tqdm",
     "wheel"
-]
+    ]
+
 build-backend = "setuptools.build_meta"
+
+
+[tool.setuptools_scm]
+write_to = "cgm_toolkit/_version.py"
+write_to_template = "__version__ = '{version}'\n"
+
+[tool.setuptools]
+include-package-data = true
+packages = {find = {exclude=["tests*", "scripts*", "docs*", "notebooks*"]}}
+package-data = {cgm_toolkit = ["data/*.*"]}
+package-dir = {cgm_toolkit = "cgm_toolkit"}
+
+[project.urls]
+home = "https://github.com/ethlau/cgm_toolkit"
+
+[project]
+name = "cgm_toolkit"
+authors = [
+    {name = "Erwin Lau", email = "ethlau@gmail.com"},
+]
+description = "CGM Toolkit"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE.rst"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dynamic = ["version", "dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.flake8]
+ignore = ["E231", "E241", "E501", "W503"]
+per-file-ignores = [
+    "__init__.py:F401",
+]
+max-line-length = 88
+count = true
