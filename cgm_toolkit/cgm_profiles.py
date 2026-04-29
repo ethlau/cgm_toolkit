@@ -27,7 +27,7 @@ h_planck = 6.6261e-27 # in cgs
 kb = 1.3807e-16 # in cgs
 
 
-etable_file_path = Path(__file__).parent / "../data/etable.hdf5"
+etable_file_path = Path(__file__).parent / "../data/etable_05_2keV.hdf5"
 ion_frac_file_path = Path(__file__).parent / "../data/ion_frac_CIE.txt"
 
 
@@ -71,29 +71,126 @@ class HaloProfile():
         return volume
 
     
-    def abel_projection(self, r2D, prof) :
-    
-        '''
-        return: np array with projected profile
-        '''
+    def abel_projection(
+        self,
+        r,
+        prof,
+        rmax_factor=2.0,
+        n_z=2048,
+        fill_mode="powerlaw",
+    ):
+        """
+        Project a spherical 3D profile along the line of sight.
+
+        This version keeps the old interface:
+
+            abel_projection(r, prof)
+
+        but avoids forcing the projected profile to zero at the last bin by
+        integrating out to rmax_factor * max(r).
+
+        Parameters
+        ----------
+        r : array-like
+            Radius array. Used both as projected radii and 3D profile radii.
+        prof : array-like
+            3D profile values.
+        rmax_factor : float
+        Outer integration radius in units of max(r).
+        n_z : int
+            Number of line-of-sight integration points.
+        fill_mode : {"zero", "edge", "powerlaw"}
+            How to handle radii beyond the tabulated range.
+
+        Returns
+        -------
+        prof2D : ndarray
+            Projected profile.
+        """
+
+        import numpy as np
         from scipy.interpolate import interp1d
         from scipy import integrate
+
+        r = np.asarray(r, dtype=float)
+        prof = np.asarray(prof, dtype=float)
+
+        if np.any(r <= 0):
+            raise ValueError("All radii must be positive.")
+
+        if len(r) != len(prof):
+            raise ValueError("r and prof must have the same length.")
+
+        order = np.argsort(r)
+        r = r[order]
+        prof = prof[order]
+
+        rmax_data = np.max(r)
+        rmax = rmax_factor * rmax_data
+
+        if rmax <= rmax_data:
+            raise ValueError("rmax_factor must be greater than 1.")
+
+        base_interp = interp1d(
+            r,
+            prof,
+            kind="linear",
+            bounds_error=False,
+            fill_value=np.nan,
+        )
+
+        if fill_mode == "zero":
+
+            def prof_interp(x):
+                y = base_interp(x)
+                return np.where(np.isfinite(y), y, 0.0)
+
+        elif fill_mode == "edge":
+
+            def prof_interp(x):
+                y = base_interp(x)
+                y = np.where(x < r[0], prof[0], y)
+                y = np.where(x > r[-1], prof[-1], y)
+                return y
+
+        elif fill_mode == "powerlaw":
+            # Estimate outer logarithmic slope from the last few radial bins.
+            nfit = min(5, len(r))
+            log_r_fit = np.log(r[-nfit:])
+            log_p_fit = np.log(np.maximum(prof[-nfit:], 1e-300))
+
+            slope, intercept = np.polyfit(log_r_fit, log_p_fit, 1)
+
+            def prof_interp(x):
+                x = np.asarray(x)
+                y = base_interp(x)
+
+                inner = x < r[0]
+                outer = x > r[-1]
+
+                y = np.where(inner, prof[0], y)
+
+                outer_y = prof[-1] * (x / r[-1]) ** slope
+                y = np.where(outer, outer_y, y)
     
-        prof2D = np.zeros(len(r2D))
-        prof3D = interp1d(r2D, prof, kind='linear', fill_value=None, bounds_error=False)
+                return y
 
-        for irp, rp in enumerate(r2D) :
-            zmax = np.sqrt(max(r2D)**2 - rp**2)
-            zbin_edge = np.linspace(0.0, zmax, 10000)
-            zbin = 0.5*(zbin_edge[1:] + zbin_edge[:-1])
-            dz = zbin_edge[1:]-zbin_edge[:-1]
-            rprime = np.sqrt(rp**2+zbin**2)
+        else:
+            raise ValueError("fill_mode must be 'zero', 'edge', or 'powerlaw'.")
 
-            fz = 2*prof3D(rprime)
-            integ = integrate.trapezoid(fz,zbin)
-            prof2D[irp] = integ
+        prof2D = np.zeros_like(r)
 
-        return prof2D 
+        for i, R in enumerate(r):
+            zmax = np.sqrt(rmax**2 - R**2)
+
+            z = np.linspace(0.0, zmax, n_z)
+            r_los = np.sqrt(R**2 + z**2)
+
+            fz = 2.0 * prof_interp(r_los)
+            prof2D[i] = integrate.trapezoid(fz, z)
+
+        return prof2D
+    
     
     def spherical_dy_profile (self, radius) :
 
