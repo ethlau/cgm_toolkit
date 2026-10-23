@@ -81,7 +81,9 @@ class XrayEmissivity():
         self.rmf = rmf
         self.arf = arf
 
-        if self.rmf != None :
+        # FIX: use 'is not None' instead of '!= None' to avoid ambiguous
+        # truth-value comparison (would raise ValueError on numpy arrays).
+        if self.rmf is not None:
             self.response = True
         
         self.etable = None
@@ -130,7 +132,7 @@ class XrayEmissivity():
         
     def setup_cie_xray_spectrum (self):
 
-        # declare the Collisional Ionization Equilibrium cieion
+        # declare the Collisional Ionization Equilibrium session
         cie = pyatomdb.spectrum.CIESession()
         cie.set_broadening(True)
 
@@ -157,33 +159,37 @@ class XrayEmissivity():
 
     def compute_cie_xray_spectrum (self, temperature, metallicity):
 
-        Zlist = np.arange(31) #<- all the elements
-        
-        # This is the electron-electron bremstrahlung component alone
-        #set all abundances to 1 (I need a full census of electrons in the plasma for e-e brems)
-        self.cie.set_abund(Zlist[1:], metallicity)
-        self.cie.set_eebrems(True)
-        spec = self.cie.return_spectrum(temperature, dolines=False, docont=False, dopseudo=False)
+        Zlist = np.arange(31)  # all the elements
 
-        # turn off all the elements
-        self.cie.set_abund(Zlist[1:], 0.0)
-        # turn back on this element
+        # ------------------------------------------------------------------ #
+        # Step 1: electron-electron bremsstrahlung alone.
+        # All abundances must be set to obtain a correct electron census, but
+        # lines/continuum/pseudo-continuum are excluded to avoid double-counting.
+        #
+        # API change (pyatomdb >= 1.0.4):
+        #   - set_eebrems()  →  cie.do_eebrems  (instance attribute)
+        #   - return_spectrum(dolines=, docont=, dopseudo=) kwargs removed;
+        #     use cie.dolines / cie.docont / cie.dopseudo attributes instead.
+        # ------------------------------------------------------------------ #
         self.cie.set_abund(Zlist[1:], metallicity)
-        # turn off e-e bremsstrahlung (avoid double counting)
-        self.cie.set_eebrems(False)
+        self.cie.dolines   = False
+        self.cie.docont    = False
+        self.cie.dopseudo  = False
+        self.cie.do_eebrems = True
+        spec = self.cie.return_spectrum(temperature)
 
+        # ------------------------------------------------------------------ #
+        # Step 2: full spectrum (lines + continuum + pseudo) at the requested
+        # metallicity, with e-e bremsstrahlung switched off to avoid
+        # double-counting the contribution already computed above.
+        # ------------------------------------------------------------------ #
+        self.cie.dolines   = True
+        self.cie.docont    = True
+        self.cie.dopseudo  = True
+        self.cie.do_eebrems = False
         spec += self.cie.return_spectrum(temperature)
-        
-        #for Z in Zlist[1:]:
-        #    self.cie.set_abund(Z, metallicity)
-        #    spec += self.cie.return_spectrum(temperature)
 
-        #print(spec)
-        #print(spec)
-        
-        spectrum = spec
-    
-        return spectrum
+        return spec
 
     def wabs (self, energy) :
         #wabs galactic absorption model */
@@ -279,27 +285,24 @@ class XrayEmissivity():
         None
         
         '''
-        try:
-            self.etable != None
-            
-        except Exception as exception:
-            logging.exception("Emissivity table not set up yet!")
-            raise exception
+        # FIX: 'self.etable != None' raises ValueError when etable is a numpy
+        # array because numpy performs element-wise comparison and the result
+        # is an array, which has no single truth value.  Use 'is not None'.
+        if self.etable is None:
+            raise RuntimeError("Emissivity table not set up yet!")
 
+        if (not filename.endswith('.hdf5')):
+            filename = filename + '.hdf5'
+        if path.exists(filename) and overwrite == False:
+            print("File already exists! Not saving file.")
         else :
-
-            if (not filename.endswith('.hdf5')):
-                filename = filename + '.hdf5'
-            if path.exists(filename) and overwrite == False:
-                print("File already exists! Not saving file.")
-            else :
-                print("Saving emissivity table as "+filename)
-                f = h5py.File(filename, "w")
-                dset1 = f.create_dataset("emissivity_table", self.etable.shape, dtype='f', data=self.etable)
-                dset2 = f.create_dataset("temperature_array", self.tbins.shape, dtype='f', data=self.tbins)
-                dset3 = f.create_dataset("metallicity_array", self.zbins.shape, dtype='f', data=self.zbins)
-                dset4 = f.create_dataset("energy_array", self.ebins.shape, dtype='f', data=self.ebins)      
-                f.close()
+            print("Saving emissivity table as "+filename)
+            f = h5py.File(filename, "w")
+            dset1 = f.create_dataset("emissivity_table", self.etable.shape, dtype='f', data=self.etable)
+            dset2 = f.create_dataset("temperature_array", self.tbins.shape, dtype='f', data=self.tbins)
+            dset3 = f.create_dataset("metallicity_array", self.zbins.shape, dtype='f', data=self.zbins)
+            dset4 = f.create_dataset("energy_array", self.ebins.shape, dtype='f', data=self.ebins)      
+            f.close()
 
     def read_emissivity_table (self,filename) :
 
@@ -408,12 +411,7 @@ class XrayEmissivity():
             if result < 0:
                 result = 0
         else: 
-            #for i, val in enumerate(result) :
-            #    if val < 0 :
-            #        result[i] = 0.0
-            
             result[result < 0] = 0.0
-        
             result = np.reshape(result, shape)
                     
         return result
