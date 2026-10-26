@@ -12,7 +12,7 @@ class XrayEmissivity():
     '''
     
     Class for tabulating X-ray emissivity values from temperature (in keV) and metallcity (in solar units). Uses pyatomdb module 
-    for X-ray emission calculations, assuming collisional ionization equilibrium. Uses scipy.interpolate.rbf for interpolation. 
+    for X-ray emission calculations, assuming collisional ionization equilibrium. Uses scipy.interpolate.interpn for interpolation. 
     
     Attributes
     ----------
@@ -143,17 +143,19 @@ class XrayEmissivity():
 
         else :
 
-            try :
-                path.exists(self.rmf)
-            except OSError as error:
-                logging.exception("RMF file "+str(self.rmf)+" not found!")
-                raise error
-            else :
-                cie.set_response(self.rmf, self.arf)
-                self.ebins = cie.ebins_out
-                self.num_ebins = len(cie.ebins_out)
-                self.emin = self.ebins[0]
-                self.emax = self.ebins[-1]
+            # path.exists returns False rather than raising, so check it explicitly
+            if not path.exists(self.rmf):
+                raise FileNotFoundError("RMF file "+str(self.rmf)+" not found!")
+            if self.arf is not None and not path.exists(self.arf):
+                raise FileNotFoundError("ARF file "+str(self.arf)+" not found!")
+
+            # pyatomdb expects arf=False when there is no ARF
+            arf = self.arf if self.arf is not None else False
+            cie.set_response(self.rmf, arf)
+            self.ebins = cie.ebins_out
+            self.num_ebins = len(cie.ebins_out)
+            self.emin = self.ebins[0]
+            self.emax = self.ebins[-1]
         
         self.cie = cie
 
@@ -161,33 +163,20 @@ class XrayEmissivity():
 
         Zlist = np.arange(31)  # all the elements
 
-        # ------------------------------------------------------------------ #
-        # Step 1: electron-electron bremsstrahlung alone.
-        # All abundances must be set to obtain a correct electron census, but
-        # lines/continuum/pseudo-continuum are excluded to avoid double-counting.
-        #
-        # API change (pyatomdb >= 1.0.4):
-        #   - set_eebrems()  →  cie.do_eebrems  (instance attribute)
-        #   - return_spectrum(dolines=, docont=, dopseudo=) kwargs removed;
-        #     use cie.dolines / cie.docont / cie.dopseudo attributes instead.
-        # ------------------------------------------------------------------ #
-        self.cie.set_abund(Zlist[1:], metallicity)
-        self.cie.dolines   = False
-        self.cie.docont    = False
-        self.cie.dopseudo  = False
+        # Metallicity scales only the metals (Z >= 3). H and He stay at their
+        # solar values, otherwise the H/He continuum (which dominates at low
+        # metallicity and high temperature) would wrongly scale with Z.
+        self.cie.set_abund(Zlist[1:3], 1.0)
+        self.cie.set_abund(Zlist[3:], metallicity)
+
+        # One call gives lines + continuum + pseudo-continuum + e-e
+        # bremsstrahlung, with the e-e brems electron census taken from the
+        # abundances above. No double counting happens within a single call.
+        self.cie.dolines    = True
+        self.cie.docont     = True
+        self.cie.dopseudo   = True
         self.cie.do_eebrems = True
         spec = self.cie.return_spectrum(temperature)
-
-        # ------------------------------------------------------------------ #
-        # Step 2: full spectrum (lines + continuum + pseudo) at the requested
-        # metallicity, with e-e bremsstrahlung switched off to avoid
-        # double-counting the contribution already computed above.
-        # ------------------------------------------------------------------ #
-        self.cie.dolines   = True
-        self.cie.docont    = True
-        self.cie.dopseudo  = True
-        self.cie.do_eebrems = False
-        spec += self.cie.return_spectrum(temperature)
 
         return spec
 
@@ -207,7 +196,9 @@ class XrayEmissivity():
         c2 = np.array([-2150., -476.1 ,4.3, -51.4, -61.1, 294.0, -47.7,
                         -31.5, -17.0, 0.0, 0.0, 0.75, 0.0, 0.0])
         
-        index = np.minimum(np.searchsorted(emarray, energy)-1, 13)
+        # clip to [0, 13]: energies below 0.1 keV would otherwise give index -1,
+        # which wraps around to the coefficients of the 10 keV segment
+        index = np.clip(np.searchsorted(emarray, energy)-1, 0, 13)
         sigma = (c0[index]+c1[index]*energy+c2[index]*energy*energy)*1.0e-24/energy**3
         return sigma
     
@@ -323,14 +314,13 @@ class XrayEmissivity():
         
         '''
         
-        try: 
+        try:
             f = h5py.File(filename, 'r')
-
         except OSError as error:
             logging.exception("File "+str(filename)+" not found!")
             raise error
-            
-        else :
+
+        with f:
             self.etable = f["emissivity_table"][:]
             self.tbins = f["temperature_array"][:]
             self.zbins = f["metallicity_array"][:]
@@ -338,8 +328,6 @@ class XrayEmissivity():
             self.num_ebins = len(self.ebins)
             self.emin = self.ebins[0]
             self.emax = self.ebins[-1]
-
-            f.close()
 
     def return_interpolated_emissivity (self, temperature, metallicity, method='splinef2d', use_log10=True) :
 
@@ -370,48 +358,28 @@ class XrayEmissivity():
         points = (ltbins, lzbins)
         values = self.etable
         
-        if use_log10 :            
+        scalar_input = np.isscalar(temperature) and np.isscalar(metallicity)
+
+        # accept lists, and allow e.g. an array of temperatures with one metallicity
+        temperature, metallicity = np.broadcast_arrays(
+            np.asarray(temperature, dtype=float), np.asarray(metallicity, dtype=float))
+        shape = temperature.shape
+
+        if use_log10 :
             lt = np.log10(temperature)
             lz = np.log10(metallicity)
         else :
-            lt = (temperature)
-            lz = (metallicity)
+            lt = temperature
+            lz = metallicity
 
-        if np.isscalar(lt) :   
-            if lt < ltbins[0]:
-                lt = ltbins[0]
-            elif lt > ltbins[-1]:
-                lt = ltbins[-1] 
-            if lz < lzbins[0]:
-                lz = lzbins[0]
-            elif lz > lzbins[-1]:
-                lz = lzbins[-1]
-                
-        else :
-            
-            shape = temperature.shape
-            lt = lt.flatten()
-            lz = lz.flatten()
-            for i, val in enumerate(lt) :
-                if val < ltbins[0]:
-                    lt[i] = ltbins[0]
-                if val > ltbins[-1]:
-                    lt[i] = ltbins[-1]
-            for i, val in enumerate(lz) :
-                if val < lzbins[0]:
-                    lz[i] = lzbins[0]
-                if val > lzbins[-1]:
-                    lz[i] = lzbins[-1]
+        # clamp to the table range (NaN passes through and gives fill_value)
+        lt = np.clip(lt.ravel(), ltbins[0], ltbins[-1])
+        lz = np.clip(lz.ravel(), lzbins[0], lzbins[-1])
 
-                    
         xi = (lt, lz)
-        result = interpn(points, values, xi, fill_value=0.0, method=method, bounds_error=False) 
+        result = interpn(points, values, xi, fill_value=0.0, method=method, bounds_error=False)
+        result[result < 0] = 0.0
 
-        if np.isscalar(lt) :
-            if result < 0:
-                result = 0
-        else: 
-            result[result < 0] = 0.0
-            result = np.reshape(result, shape)
-                    
-        return result
+        if scalar_input :
+            return result[0]
+        return np.reshape(result, shape)
