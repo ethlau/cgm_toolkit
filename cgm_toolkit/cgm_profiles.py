@@ -27,7 +27,7 @@ h_planck = 6.6261e-27 # in cgs
 kb = 1.3807e-16 # in cgs
 
 
-etable_file_path = Path(__file__).parent / "../data/etable_05_2keV.hdf5"
+etable_file_path = Path(__file__).parent / "../data/etable_05_2keV_3D.hdf5"
 ion_frac_file_path = Path(__file__).parent / "../data/ion_frac_CIE.txt"
 
 
@@ -269,7 +269,7 @@ class HaloProfile():
         input:
             radius: numpy array of radius in kpc. Can be different from the one that initialize the class.
 
-            etable: string of file name of tabulated emissivity table.
+            etable: string of file name of tabulated 3D (temperature, redshift, metallicity) emissivity table.
         
         return: numpy array with spherical xray emissivity profile
             
@@ -282,11 +282,13 @@ class HaloProfile():
         '''
         xray = xray_emissivity.XrayEmissivity()
         xray.read_emissivity_table(etable)
-        xcool = xray.return_interpolated_emissivity(self.temperature, self.metallicity)
+        xcool = xray.return_interpolated_emissivity(self.temperature, self.redshift, self.metallicity)
 
         ne = self.density 
         nH = ne / 1.2
-        em = xcool  * ne * nH / (1.+self.redshift)**4 / (4.0 * math.pi)
+        # The table already includes one 1/(1+z) from observed photon energy,
+        # so surface brightness dimming only needs the remaining (1+z)^3.
+        em = xcool  * ne * nH / (1.+self.redshift)**3 / (4.0 * math.pi)
 
         profile = np.interp(radius, self.radial_bin, em)
 
