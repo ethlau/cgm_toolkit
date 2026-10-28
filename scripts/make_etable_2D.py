@@ -18,9 +18,9 @@ The defaults match etable_05_2keV.hdf5:
     metallicity  0.001 - 10 Zsun, 21 log-spaced bins
     units        erg s^-1 cm^3, no Galactic absorption, no instrument response
 
-Note: this 2D layout has no redshift axis, so it cannot be read by
-XrayEmissivity.read_emissivity_table or used by cgm_profiles, which expect
-3D tables (see make_etable_3D.py). Read it directly with h5py.
+XrayEmissivity.read_emissivity_table and cgm_profiles accept this layout and
+use the z = 0 emissivity at every redshift, with a warning when z > 0. For
+accurate results at z > 0 use a 3D table instead (see make_etable_3D.py).
 
 Requires pyatomdb with the AtomDB data files installed.
 
