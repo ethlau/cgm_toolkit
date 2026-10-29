@@ -270,6 +270,7 @@ class HaloProfile():
             radius: numpy array of radius in kpc. Can be different from the one that initialize the class.
 
             etable: string of file name of tabulated 3D (temperature, redshift, metallicity) emissivity table.
+                A 2D (temperature, metallicity) table also works; it is treated as z = 0 and used at every redshift.
         
         return: numpy array with spherical xray emissivity profile
             

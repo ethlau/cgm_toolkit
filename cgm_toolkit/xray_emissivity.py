@@ -1,6 +1,7 @@
 import errno
 import logging
 import os
+import warnings
 from pathlib import Path
 
 import h5py
@@ -109,7 +110,8 @@ class XrayEmissivity:
     arf : str or None
         Filename for the ARF response file. Optional.
     etable : ndarray, shape (num_tbins, num_rbins, num_mbins)
-        Tabulated emissivity values.
+        Tabulated emissivity values. A 2D table read from file has shape
+        (num_tbins, num_mbins) and rbins set to None.
     tbins : ndarray
         Temperature bin centres in keV.
     rbins : ndarray
@@ -540,7 +542,12 @@ class XrayEmissivity:
 
     def read_emissivity_table(self, filename):
         """
-        Read a previously saved 3D emissivity table from an HDF5 file.
+        Read a previously saved emissivity table from an HDF5 file.
+
+        Both 3D (temperature, redshift, metallicity) tables and 2D
+        (temperature, metallicity) tables are supported. A 2D table has no
+        "redshift_array" dataset and is treated as tabulated at z = 0; it
+        is then used for every redshift (see return_interpolated_emissivity).
 
         Parameters
         ----------
@@ -556,12 +563,18 @@ class XrayEmissivity:
         with f:
             self.etable = f["emissivity_table"][:]
             self.tbins  = f["temperature_array"][:]
-            self.rbins  = f["redshift_array"][:]
             self.mbins  = f["metallicity_array"][:]
             self.ebins  = f["energy_array"][:]
-            self.num_tbins = self.etable.shape[0]
-            self.num_rbins = self.etable.shape[1]
-            self.num_mbins = self.etable.shape[2]
+            if self.etable.ndim == 2 and "redshift_array" not in f:
+                self.rbins = None
+                self.num_rbins = None
+                self.num_tbins = self.etable.shape[0]
+                self.num_mbins = self.etable.shape[1]
+            else:
+                self.rbins = f["redshift_array"][:]
+                self.num_tbins = self.etable.shape[0]
+                self.num_rbins = self.etable.shape[1]
+                self.num_mbins = self.etable.shape[2]
             self.num_ebins = len(self.ebins)
             self.emin = self.ebins[0]
             self.emax = self.ebins[-1]
@@ -579,10 +592,17 @@ class XrayEmissivity:
         use_log10=True,
     ):
         """
-        Return emissivity from the interpolated 3D table.
+        Return emissivity from the interpolated table.
 
         Inputs may be scalars or arrays of broadcastable shapes.
         Values outside the tabulated range are clamped to the nearest edge.
+
+        With a 2D (z = 0) table the redshift only sets the output shape: the
+        z = 0 emissivity is returned for every redshift, and a warning is
+        issued if any redshift is above 0. That leaves out the shift of the
+        band to harder rest-frame energies (K-correction) and, for tables in
+        erg, the 1/(1+z) from the observed photon energy that 3D tables
+        include.
 
         Parameters
         ----------
@@ -594,7 +614,7 @@ class XrayEmissivity:
             Metallicity in solar units.
         method : str, optional
             Interpolation method passed to scipy.interpolate.interpn.
-            Default 'linear'. Use 'splinef2d' only for 2D tables; for 3D
+            Default 'linear'. 'splinef2d' works only with 2D tables; for 3D
             use 'linear' or 'nearest'.
         use_log10 : bool, optional
             Interpolate in log space (recommended). Default True.
@@ -605,17 +625,21 @@ class XrayEmissivity:
             Emissivity in erg s^-1 cm^3 or ph s^-1 cm^3 depending on
             use_energy_unit. Negative values are set to zero.
         """
+        is_2d = self.rbins is None
+
         # Build the grid axes in the interpolation space
         if use_log10:
             ltbins = np.log10(self.tbins)
-            lrbins = np.log10(self.rbins)           # stored as (1+z)
             lmbins = np.log10(self.mbins)
         else:
             ltbins = self.tbins
-            lrbins = self.rbins
             lmbins = self.mbins
 
-        points = (ltbins, lrbins, lmbins)
+        if not is_2d:
+            lrbins = np.log10(self.rbins) if use_log10 else self.rbins  # stored as (1+z)
+            points = (ltbins, lrbins, lmbins)
+        else:
+            points = (ltbins, lmbins)
 
         # Broadcast so that e.g. an array of temperatures can be used with a
         # scalar redshift and metallicity
@@ -627,22 +651,33 @@ class XrayEmissivity:
         )
         shape = temperature.shape
 
+        if is_2d and np.any(redshift > 0.0):
+            warnings.warn(
+                "Using a 2D (z = 0) emissivity table at z > 0: the z = 0 "
+                "emissivity is used as is, without the band shift "
+                "(K-correction) or, for erg tables, the 1/(1+z) photon-energy "
+                "factor. Use a 3D table for accurate results at z > 0.",
+                stacklevel=2,
+            )
+
         # Transform query coordinates (redshift bins are stored as 1+z)
         if use_log10:
             lt = np.log10(temperature).ravel()
-            lr = np.log10(1.0 + redshift).ravel()
             lm = np.log10(metallicity).ravel()
         else:
             lt = temperature.ravel()
-            lr = (1.0 + redshift).ravel()
             lm = metallicity.ravel()
 
         # Clamp to grid boundaries
         lt = np.clip(lt, ltbins[0], ltbins[-1])
-        lr = np.clip(lr, lrbins[0], lrbins[-1])
         lm = np.clip(lm, lmbins[0], lmbins[-1])
 
-        xi = np.column_stack([lt, lr, lm])
+        if not is_2d:
+            lr = np.log10(1.0 + redshift).ravel() if use_log10 else (1.0 + redshift).ravel()
+            lr = np.clip(lr, lrbins[0], lrbins[-1])
+            xi = np.column_stack([lt, lr, lm])
+        else:
+            xi = np.column_stack([lt, lm])
         result = interpn(
             points,
             self.etable,
